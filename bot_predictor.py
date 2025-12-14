@@ -1,4 +1,6 @@
 # bot_predictor.py
+import requests
+import os
 import logging
 from telegram import Update, ForceReply
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
@@ -6,21 +8,53 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 import pandas as pd
 import numpy as np
 from scipy.stats import poisson
+API_KEY = os.getenv("FOOTBALL_API_KEY")
 
+HEADERS = {
+    "x-apisports-key": API_KEY
+}
+
+LEAGUES = [61, 39, 140, 135, 78]  # Ligue 1, PL, Liga, Serie A, Bundesliga
+def search_team(team_name):
+    url = "https://v3.football.api-sports.io/teams"
+    params = {"search": team_name}
+    r = requests.get(url, headers=HEADERS, params=params)
+    data = r.json().get("response", [])
+    if not data:
+        return None
+    return data[0]["team"]["id"]
+
+
+def get_last_matches(team_id, season=2024):
+    url = "https://v3.football.api-sports.io/fixtures"
+    params = {
+        "team": team_id,
+        "season": season,
+        "last": 5
+    }
+    r = requests.get(url, headers=HEADERS, params=params)
+    matches = []
+    for f in r.json().get("response", []):
+        goals = f["goals"]
+        matches.append((goals["home"], goals["away"]))
+    return matches
+    
 # --------- CONFIG ----------
 BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 # Exemple de dataset synthétique pour démo; remplace par ta vraie base ou appel API
-PAST_MATCHES = [
-    ("TeamA","TeamB",2,1),
-    ("TeamC","TeamA",0,3),
-    ("TeamB","TeamC",1,1),
-    ("TeamA","TeamC",1,1),
-    ("TeamB","TeamA",0,2),
-    ("TeamC","TeamB",2,0),
-    ("TeamA","TeamB",3,0),
-    ("TeamB","TeamC",2,2),
-    ("TeamC","TeamA",1,2),
-    ("TeamB","TeamA",1,1)
+home_id = search_team(home)
+away_id = search_team(away)
+
+if not home_id or not away_id:
+    await update.message.reply_text("❌ Équipe non trouvée")
+    return
+
+home_matches = get_last_matches(home_id)
+away_matches = get_last_matches(away_id)
+
+if not home_matches or not away_matches:
+    await update.message.reply_text("❌ Pas assez de données")
+    return
 ]
 # ---------------------------
 
